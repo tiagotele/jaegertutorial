@@ -85,5 +85,44 @@ func main() {
 		w.Write([]byte("app1"))
 	})
 
+	http.HandleFunc("/app1to3", func(w http.ResponseWriter, r *http.Request) {
+		spanApp2, _ := opentracing.StartSpanFromContext(ctx, "app1")
+
+		defer spanApp2.Finish()
+
+		v := url.Values{}
+		v.Set("helloTo", helloTo)
+		url := "http://localhost:8082/app2to3"
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			panic(err.Error())
+		}
+
+		time.Sleep(1 * time.Second)
+		ext.SpanKindRPCClient.Set(spanApp2)
+		ext.HTTPUrl.Set(spanApp2, url)
+		ext.HTTPMethod.Set(spanApp2, "GET")
+		spanApp2.Tracer().Inject(
+			spanApp2.Context(),
+			opentracing.HTTPHeaders,
+			opentracing.HTTPHeadersCarrier(req.Header),
+		)
+
+		resp, err := xhttp.Do(req)
+		if err != nil {
+			ext.LogError(spanApp2, err)
+			panic(err.Error())
+		}
+
+		helloStr := string(resp)
+
+		spanApp2.LogFields(
+			otlog.String("event", "string-format"),
+			otlog.String("value", helloStr),
+		)
+
+		w.Write([]byte("app1"))
+	})
+
 	log.Fatal(http.ListenAndServe(":8081", nil))
 }
