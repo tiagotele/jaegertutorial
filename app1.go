@@ -13,6 +13,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"time"
 )
 
 func initJaeger(service string) (opentracing.Tracer, io.Closer) {
@@ -33,31 +34,32 @@ func initJaeger(service string) (opentracing.Tracer, io.Closer) {
 }
 
 func main() {
-	tracer, closer := initJaeger("hello-world")
+	tracer, closer := initJaeger("app-distributed-1")
 	defer closer.Close()
 	opentracing.SetGlobalTracer(tracer)
 
 	helloTo := "My awesome string"
 
-	span := tracer.StartSpan("say-hello")
-	span.SetTag("hello-to", helloTo)
+	span := tracer.StartSpan("span-app")
+	span.SetTag("mystring", helloTo)
 	defer span.Finish()
 
 	ctx := opentracing.ContextWithSpan(context.Background(), span)
 
 	http.HandleFunc("/app1", func(w http.ResponseWriter, r *http.Request) {
-		spanApp2, _ := opentracing.StartSpanFromContext(ctx, "printHello")
+		spanApp2, _ := opentracing.StartSpanFromContext(ctx, "app1")
 
 		defer spanApp2.Finish()
 
 		v := url.Values{}
 		v.Set("helloTo", helloTo)
-		url := "http://localhost:8082/app2?" + v.Encode()
+		url := "http://localhost:8082/app2"
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
 			panic(err.Error())
 		}
 
+		time.Sleep(1 * time.Second)
 		ext.SpanKindRPCClient.Set(spanApp2)
 		ext.HTTPUrl.Set(spanApp2, url)
 		ext.HTTPMethod.Set(spanApp2, "GET")
